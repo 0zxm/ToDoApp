@@ -113,15 +113,26 @@ class ToDoApp(QWidget):
 
         # 任务列表带标题
         self.to_do_title_layout = QHBoxLayout()
-        self.to_do_title_layout.setContentsMargins(10,10,10,10)
+        self.to_do_title_layout.setContentsMargins(20, 10, 25, 10)
+
         self.to_do_title_label = QLabel("待办事项:")
+        self.to_do_title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
         self.to_do_ddl_label = QLabel("DDL:")
         self.to_do_ddl_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
         self.sort_by_ddl_button = QPushButton()
-        self.sort_by_ddl_button.setIcon(QIcon("python/pyQt/排序.png"))
-        self.sort_by_ddl_button.setFixedSize(QSize(20,20))
-        self.sort_by_ddl_button.setStyleSheet("QPushButton{border:none;background-color:transparent}")
+        self.sort_by_ddl_button.setIcon(QIcon("./排序.png"))
+        self.sort_by_ddl_button.setFixedSize(QSize(13, self.to_do_title_label.sizeHint().height()))  # 设置按钮高度与标签高度一致
+        self.sort_by_ddl_button.setStyleSheet('''
+        QPushButton {border:none;background-color:transparent;}
+        QPushButton::icon {
+            width: 100%;
+            height: 100%;
+        }
+        ''')
         self.sort_by_ddl_button.clicked.connect(self.sort_by_ddl)
+
         self.to_do_title_layout.addWidget(self.to_do_title_label)
         self.to_do_title_layout.addWidget(self.to_do_ddl_label)
         self.to_do_title_layout.addWidget(self.sort_by_ddl_button)
@@ -155,13 +166,30 @@ class ToDoApp(QWidget):
         self.import_widget = ImportWidget(self)
         self.import_widget.import_finished.connect(self.batch_import)
 
-        self.setStyleSheet('''*{
-                           font-family: "华文新魏","华文细黑","方正兰亭黑","Microsoft YaHei";  font-size:19px;
-                           }
-                           QLineEdit{border:1px solid pink}
-                           QListWidget::item:selected{background-color:lightgray}
-                           QListWidget::item:hover{background-color:skyblue}
-                           ''')
+
+        style_sheet = """* {
+                            font-family: "华文新魏", "华文细黑", "方正兰亭黑", "Microsoft YaHei";  
+                            font-size: 19px;
+                        }
+                        QLineEdit {
+                            border: 1px solid pink;
+                        }
+                        QListWidget::item:selected {
+                            background-color: skyblue;
+                        }
+                        QListWidget::item:hover {
+                            background-color: skyblue;
+                        }
+                        /* 垂直滚动条 */
+                        QScrollBar:vertical {
+                            width: 20px;        /* 垂直滚动条宽度 */            
+                        }
+                        QScrollBar::handle:vertical {
+                             background-color: blue;   /* 滚动条背景色 */
+                        }
+                        """
+
+        self.setStyleSheet(style_sheet)
         
         self.init_from_file()
 
@@ -243,7 +271,8 @@ class ToDoApp(QWidget):
         item.setData(Qt.UserRole, todo_item)  # 保存任务对象
         item.setFlags(item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled |Qt.ItemIsEditable)
         if todo_item.is_completed:
-            item.setCheckState(Qt.CheckState.Checked)  
+            item.setCheckState(Qt.CheckState.Checked) 
+            item_widget.setStyleSheet("QLabel{background-color:transparent;color:gray;}") 
         else:
             item.setCheckState(Qt.CheckState.Unchecked)
         self.to_do_list.addItem(item)
@@ -258,15 +287,7 @@ class ToDoApp(QWidget):
         # 获取当前选中的项
         selected_items = self.to_do_list.selectedItems()
         for item in selected_items:
-            todo_item = item.data(Qt.UserRole)
-            if item.checkState() == Qt.Checked:
-                todo_item.is_completed = True
-                item.setCheckState(Qt.Unchecked)
-                item.setForeground(Qt.black)
-            else:
-                todo_item.is_completed = False
-                item.setCheckState(Qt.Checked)
-                item.setForeground(Qt.gray)
+            self.change_item_state(item)
 
     def delete_item(self):
         # 获取当前选中的项
@@ -274,35 +295,42 @@ class ToDoApp(QWidget):
         for item in selected_items:
             self.to_do_list.takeItem(self.to_do_list.row(item))  # 删除 QListWidgetItem                         
 
+    def change_item_state(self,item: QListWidgetItem):
+        todo_item = item.data(Qt.UserRole)
+        itemWidget = self.to_do_list.itemWidget(item)
+        if item.checkState() == Qt.CheckState.Checked:
+            todo_item.is_completed = False
+            item.setCheckState(Qt.CheckState.Unchecked)
+            itemWidget.setStyleSheet("QLabel{color:black;}")
+        else:
+            todo_item.is_completed = True
+            item.setCheckState(Qt.CheckState.Checked)
+            itemWidget.setStyleSheet("QLabel{background-color:transparent;color:gray;}")
+
     def on_double_clicked(self, index: QModelIndex):
         # print(index.row())  # 打印行号
         item = self.to_do_list.itemFromIndex(index)  # 获取 QListWidgetItem
         if item:
-            if item.checkState() == Qt.CheckState.Unchecked:
-                item.setCheckState(Qt.CheckState.Checked)
-                # 标记完成
-                todo_item = item.data(Qt.UserRole)
-                todo_item.is_completed = True
-            elif item.checkState() == Qt.CheckState.Checked :
-                item.setCheckState(Qt.CheckState.Unchecked)
-                # 标记未完成
-                todo_item = item.data(Qt.UserRole)
-                todo_item.is_completed = False
+            self.change_item_state(item)
         else:
             print("QListWidgetItem获取失败")
 
     def init_from_file(self, file_path=None):
         # 默认初始化文件为当前目录下的 to_do.json
         if file_path is None:
-            file_path = "python/pyQt/to_do.json"
+            file_path = "./to_do.json"
             # 读取文件内容
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
-            self.batch_import(json.loads(text))
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+                self.batch_import(json.loads(text))
+                print("读取文件成功")
+        except FileNotFoundError:
+            print("文件不存在")
 
     def sort_by_ddl(self):
         if self.sort_value == "asc":
-            self.sort_value = "desc"
+            self.sort_value = "desc" 
         else:
             self.sort_value = "asc"
         # 按 DDL 排序
@@ -333,7 +361,7 @@ class ToDoApp(QWidget):
 
     def closeEvent(self, event):
         # 关闭窗口时保存数据
-        with open("python/pyQt/to_do.json", "w", encoding="utf-8") as f:
+        with open("./to_do.json", "w", encoding="utf-8") as f:
             self.export_to_clipboard(True)
             f.write(QApplication.clipboard().text())
             QApplication.clipboard().clear()
