@@ -5,9 +5,6 @@ from PyQt5.QtGui import QColor,QIcon
 import datetime
 import json
 
-from flask.config import T
-
-
 class ImportWidget(QWidget):
     # 自定义信号
     import_finished = pyqtSignal(dict)
