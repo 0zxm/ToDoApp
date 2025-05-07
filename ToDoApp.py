@@ -1,9 +1,11 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QListWidget, QListWidgetItem, QLabel, QGridLayout, QTextEdit, QAbstractItemView, QMessageBox
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QListWidget, QListWidgetItem, QLabel, QGridLayout, QTextEdit, QAbstractItemView, QMessageBox, QSystemTrayIcon, QMenu, QAction
 from PyQt5.QtCore import Qt, QSize,QModelIndex,pyqtSignal
 from PyQt5.QtGui import QColor,QIcon
 import datetime
 import json
+
+from  MyMessageBox import MyMessageBox
 
 class ImportWidget(QWidget):
     # 自定义信号
@@ -119,7 +121,7 @@ class ToDoApp(QWidget):
         self.to_do_ddl_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.sort_by_ddl_button = QPushButton()
-        self.sort_by_ddl_button.setIcon(QIcon("./排序.png"))
+        self.sort_by_ddl_button.setIcon(QIcon("python/pyQt/ToDoApp/排序.png"))
         self.sort_by_ddl_button.setFixedSize(QSize(13, self.to_do_title_label.sizeHint().height()))  # 设置按钮高度与标签高度一致
         self.sort_by_ddl_button.setStyleSheet('''
         QPushButton {border:none;background-color:transparent;}
@@ -163,6 +165,24 @@ class ToDoApp(QWidget):
         self.import_widget = ImportWidget(self)
         self.import_widget.import_finished.connect(self.batch_import)
 
+        # 设置系统托盘
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(QIcon("python/pyQt/ToDoApp/icon.png"))
+
+        self.tray_icon.activated.connect(self.tray_icon_activated)
+
+        # 创建一个上下文菜单
+        self.tray_menu = QMenu()
+        quit_action = QAction("退出", self.tray_menu)
+        quit_action.triggered.connect(self.close)
+        self.tray_menu.addAction(quit_action)
+
+        # 将上下文菜单与托盘图标关联
+        self.tray_icon.setContextMenu(self.tray_menu)
+
+        # 显示托盘图标
+        self.tray_icon.show()
+
 
         style_sheet = """* {
                             font-family: "华文新魏", "华文细黑", "方正兰亭黑", "Microsoft YaHei";  
@@ -187,8 +207,20 @@ class ToDoApp(QWidget):
                         """
 
         self.setStyleSheet(style_sheet)
+
+        self.girl_list = [
+            ""
+        ]
         
         self.init_from_file()
+
+     # 处理托盘图标的双击事件（可选）
+    def tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.DoubleClick:  # 双击托盘图标恢复窗口
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            self.tray_icon.hide()
 
     def showAndWait(self):
         self.import_widget.show()
@@ -235,12 +267,16 @@ class ToDoApp(QWidget):
             deadline_time = deadline_time.strip() if deadline_time else "未知"
         else:
             # 获取输入框的文本
-            title = self.title_input.text().strip()
+            title = self.title_input.text().strip() 
             description = self.description_input.text().strip()
             deadline_time = self.deadline_input.text().strip()
             if not deadline_time: deadline_time = "未知"
         # TODO 优化时间显示居右
         # 创建 ToDoItem 实例
+        if title == "girl":
+            self.warm_heart_widget = MyMessageBox(self)
+            self.title_input.clear()
+            return
         todo_item = ToDoItem(title, description,deadline_time,is_completed)
         # 创建新的列表项  创建自定义Widget
         item_widget = QWidget()
@@ -269,7 +305,7 @@ class ToDoApp(QWidget):
         item.setFlags(item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled |Qt.ItemIsEditable)
         if todo_item.is_completed:
             item.setCheckState(Qt.CheckState.Checked) 
-            item_widget.setStyleSheet("QLabel{background-color:transparent;color:gray;}") 
+            item_widget.setStyleSheet("QLabel{background-color:transparent;color:gray;text-decoration:line-through;}") 
         else:
             item.setCheckState(Qt.CheckState.Unchecked)
         self.to_do_list.addItem(item)
@@ -302,7 +338,7 @@ class ToDoApp(QWidget):
         else:
             todo_item.is_completed = True
             item.setCheckState(Qt.CheckState.Checked)
-            itemWidget.setStyleSheet("QLabel{background-color:transparent;color:gray;}")
+            itemWidget.setStyleSheet("QLabel{background-color:transparent;color:gray; text-decoration:line-through;}")
 
     def on_double_clicked(self, index: QModelIndex):
         # print(index.row())  # 打印行号
@@ -315,7 +351,7 @@ class ToDoApp(QWidget):
     def init_from_file(self, file_path=None):
         # 默认初始化文件为当前目录下的 to_do.json
         if file_path is None:
-            file_path = "./to_do.json"
+            file_path = "python/pyQt/ToDoApp/to_do.json"
             # 读取文件内容
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -349,20 +385,33 @@ class ToDoApp(QWidget):
             self.add_item(item.title, item.description, item.deadline_time, item.is_completed)
     
     def sort_key(self, item):
-        item.deadline_time.replace("：",":")
+        item.deadline_time = item.deadline_time.replace("：",":")
+
         if item.deadline_time == "未知":
             return datetime.datetime.max
         else:
-            return datetime.datetime.strptime(item.deadline_time.replace("：",":"), "%Y-%m-%d %H:%M")
+            date, time = item.deadline_time.split(" ")
+            if time == "24:00":
+                date = (datetime.datetime.strptime(date, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                time = "00:00"
+                item.deadline_time = date + " " + time
+            return datetime.datetime.strptime(item.deadline_time, "%Y-%m-%d %H:%M")
           
 
     def closeEvent(self, event):
-        # 关闭窗口时保存数据
-        with open("./to_do.json", "w", encoding="utf-8") as f:
-            self.export_to_clipboard(True)
-            f.write(QApplication.clipboard().text())
-            QApplication.clipboard().clear()
-        event.accept()
+        # 最小化到系统托盘而不是关闭
+        if self.isVisible():
+            self.hide()
+            self.tray_icon.show()
+            self.tray_icon.showMessage("提示", "应用已最小化到系统托盘", QSystemTrayIcon.Information, 2000)
+            event.ignore()  # 忽略默认的关闭事件
+        else:
+            # 关闭窗口时保存数据
+            with open("python/pyQt/ToDoApp/to_do.json", "w", encoding="utf-8") as f:
+                self.export_to_clipboard(True)
+                f.write(QApplication.clipboard().text())
+                QApplication.clipboard().clear()
+            event.accept()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
